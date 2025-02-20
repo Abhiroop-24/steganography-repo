@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Steganography App</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Steganography App</h1>
+        <div class="tabs">
+            <button class="tab-button" onclick="openTab('encrypt')">Encrypt</button>
+            <button class="tab-button" onclick="openTab('decrypt')">Decrypt</button>
+        </div>
+        <div id="encrypt" class="tab-content">
+            <h2>Encrypt</h2>
+            <form id="encrypt-form" action="/encrypt" method="post" enctype="multipart/form-data">
+                <label for="image">Select Image:</label>
+                <input type="file" id="image" name="image" required><br><br>
+                <label for="message">Message:</label>
+                <input type="text" id="message" name="message" required><br><br>
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required><br><br>
+                <div id="error-message" style="color: red; margin-top: 5px;"></div><br><br>
+                <button type="submit" class="btn">Encrypt</button>
+            </form>
+            <div id="download-link" style="margin-top: 20px;"></div>
+            <div id="loading-animation" class="loading" style="display: none;"></div>
+        </div>
+        <div id="decrypt" class="tab-content">
+            <h2>Decrypt</h2>
+            <form action="/decrypt" method="post" enctype="multipart/form-data">
+                <label for="image">Select Image:</label>
+                <input type="file" id="image" name="image" required><br><br>
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required><br><br>
+                <div id="error-message" style="color: red; margin-top: 5px;"></div><br><br>
+                <button type="submit" class="btn">Decrypt</button>
+            </form>
+        </div>
+    </div>
+    <div id="decrypted-message-container" class="decrypted-message-container" style="display: none;">
+        <h2>Decrypted Message</h2>
+        <div id="decrypted-message"></div>
+        <div id="countdown-timer" class="countdown-timer"></div>
+    </div>
+    <script>
+        function openTab(tabName) {
+            var i;
+            var x = document.getElementsByClassName("tab-content");
+            for (i = 0; i < x.length; i++) {
+                x[i].style.display = "none";
+            }
+            document.getElementById(tabName).style.display = "block";
+        }
+
+        function validatePassword(password) {
+            const minLength = 8;
+            const hasUpperCase = /[A-Z]/.test(password);
+            const hasLowerCase = /[a-z]/.test(password);
+            const hasNumber = /[0-9]/.test(password);
+
+            if (password.length < minLength) {
+                return 'Password must be at least 8 characters long.';
+            }
+            if (!hasUpperCase) {
+                return 'Password must contain at least one uppercase letter.';
+            }
+            if (!hasLowerCase) {
+                return 'Password must contain at least one lowercase letter.';
+            }
+            if (!hasNumber) {
+                return 'Password must contain at least one number.';
+            }
+            return '';
+        }
+
+        document.getElementById('encrypt-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            var password = document.getElementById('password').value;
+            var errorMessage = validatePassword(password);
+            if (errorMessage) {
+                document.getElementById('error-message').innerText = errorMessage;
+                alert(errorMessage);
+                return;
+            }
+            var formData = new FormData(this);
+            document.getElementById('loading-animation').style.display = 'inline-block';
+            fetch('/encrypt', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                alert(data.message);
+                document.getElementById('download-link').innerHTML = `<button class="btn" onclick="downloadImage('${data.download_url}')">Download Encrypted Image</button>`;
+                document.getElementById('error-message').innerText = '';  // Clear error message
+                document.getElementById('loading-animation').style.display = 'none';
+            })
+            .catch(error => {
+                document.getElementById('error-message').innerText = error.message;
+                alert(error.message);
+                document.getElementById('loading-animation').style.display = 'none';
+            });
+        });
+
+        function downloadImage(url) {
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'encoded_image.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            document.getElementById('download-link').innerHTML = '';  // Hide download button after click
+        }
+
+        document.querySelector('form[action="/decrypt"]').addEventListener('submit', function(event) {
+            event.preventDefault();
+            var formData = new FormData(this);
+            fetch('/decrypt', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Incorrect password');
+                }
+                return response.text();
+            })
+            .then(data => {
+                document.getElementById('decrypted-message').innerText = data;
+                document.getElementById('decrypted-message-container').style.display = 'block';
+                document.getElementById('error-message').innerText = '';  // Clear error message
+                startCountdown(30);
+                setTimeout(() => {
+                    document.getElementById('decrypted-message').innerText = '';  // Clear decrypted message
+                    document.getElementById('decrypted-message-container').style.display = 'none';
+                    alert('Password has been changed and output has been erased automatically.');
+                }, 30000);  // 30 seconds in milliseconds
+            })
+            .catch(error => {
+                document.getElementById('error-message').innerText = error.message;
+                document.getElementById('decrypted-message').innerText = '';  // Clear decrypted message
+                document.getElementById('decrypted-message-container').style.display = 'none';
+                alert(error.message);
+            });
+        });
+
+        function startCountdown(seconds) {
+            var countdownElement = document.getElementById('countdown-timer');
+            countdownElement.innerText = seconds;
+            countdownElement.style.display = 'block';
+            var interval = setInterval(() => {
+                seconds--;
+                countdownElement.innerText = seconds;
+                if (seconds <= 0) {
+                    clearInterval(interval);
+                    countdownElement.style.display = 'none';
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
